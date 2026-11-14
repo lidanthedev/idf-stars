@@ -1,8 +1,11 @@
 // ==UserScript==
 // @name         הכוכבים שלי — ממשק חדש לאתר הכוכבים
 // @namespace    idf-stars
-// @version      1.1
+// @version      1.2
 // @description  ממשק עברי מודרני עם חיפוש לאתר הכוכבים של מולטיפאס, ושמירת הקוד מה-SMS
+// @match        https://idf.mltp.co.il/
+// @match        https://idf.mltp.co.il/?*
+// @match        https://idf.mltp.co.il/Account/Login*
 // @match        https://idf.mltp.co.il/Account/Transactions*
 // @match        https://idf.mltp.co.il/Account/RetailChains*
 // @homepageURL  https://github.com/lidanthedev/idf-stars
@@ -200,14 +203,81 @@
 
   const ICON_SEARCH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 
-  // Wipe the old page and its Bootstrap styles.
-  document.querySelectorAll('link[rel=stylesheet],style').forEach(n => n.remove());
-  document.documentElement.lang = 'he';
-  document.documentElement.dir = 'rtl';
-  document.title = 'הכוכבים שלי';
-  document.head.insertAdjacentHTML('beforeend',
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1"><style>' + CSS + '</style>');
+  // Drop the old Bootstrap styles and load ours.
+  function setupHead(css, title) {
+    document.querySelectorAll('link[rel=stylesheet],style').forEach(n => n.remove());
+    document.documentElement.lang = 'he';
+    document.documentElement.dir = 'rtl';
+    document.title = title;
+    document.head.insertAdjacentHTML('beforeend',
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1"><style>' + css + '</style>');
+  }
+
+  const LOGIN_CSS = `
+  body.login{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 16px}
+  .login .container{width:100%;max-width:420px}
+  .login .mainContent,.login .hpInfo.span6{display:block;width:100%;margin:0}
+  .login .mastheadStars,.login .m_Navbar,.login .void,.login .hpInfo.span4,.login hr,.login .footer,.login .marketing img{display:none}
+  .login .jumbotron{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:28px 22px;box-shadow:var(--shadow)}
+  .lg-brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+  .lg-brand h1{margin:0;font-size:22px;letter-spacing:-.01em}
+  .lg-brand p{margin:0;font-size:14px;color:var(--muted)}
+  .lg-fields{display:flex;flex-direction:column;gap:14px}
+  .lg-field{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:500}
+  .lg-field input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:17px;direction:ltr;text-align:right;-moz-appearance:textfield}
+  .lg-field input::-webkit-inner-spin-button,.lg-field input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  .lg-field input::placeholder{color:var(--muted);opacity:.7}
+  .lg-field input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 4px var(--gold-soft)}
+  .login .field-validation-error{color:var(--neg);font-size:13px;font-weight:500}
+  .login .form-group{display:flex;justify-content:center;margin:20px 0 !important}
+  @media (max-width:380px){.login .g-recaptcha{transform:scale(.88);transform-origin:center}}
+  .login input[type=submit]{width:100%;border:none;border-radius:999px;padding:14px;font-size:16px;font-weight:600;cursor:pointer;background:var(--olive);color:#fff;transition:transform .08s}
+  @media (prefers-color-scheme:dark){.login input[type=submit]{background:var(--gold);color:#1b1e16}}
+  .login input[type=submit]:active{transform:scale(.98)}
+  .login input[type=submit]:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  .login .marketing{margin-top:18px;font-size:12.5px;color:var(--muted)}
+  .login .marketing .span4{padding:10px 4px;border-top:1px solid var(--line)}
+  .login .marketing .span4:first-child{border-top:none}
+  .login .marketing h4{margin:0 0 2px;font-size:13px;color:var(--ink)!important}
+  .login .marketing p{margin:0}
+  `;
+
+  // Restyle the real login form in place: the reCAPTCHA is bound to this page, so its box must never move.
+  function skinLogin() {
+    setupHead(CSS + LOGIN_CSS, 'כניסה · הכוכבים שלי');
+    document.body.classList.add('login');
+    const form = document.getElementById('signin-form');
+    form.querySelector('.form-signin-heading')?.insertAdjacentHTML('beforebegin',
+      '<div class="lg-brand"><span class="brand"><span class="star" aria-hidden="true">★</span></span><div><h1>הכוכבים שלי</h1><p>כניסה למתגייס/ת או חייל/ת בשירות חובה</p></div></div>');
+    form.querySelector('.form-signin-heading')?.remove();
+    const fields = document.createElement('div');
+    fields.className = 'lg-fields';
+    for (const [id, label, hint] of [['IsraelPersonalId', 'תעודת זהות', '9 ספרות'], ['PhoneNumber', 'טלפון נייד', '05XXXXXXXX']]) {
+      const input = document.getElementById(id);
+      if (!input) continue;
+      const field = document.createElement('label');
+      field.className = 'lg-field';
+      field.textContent = label;
+      input.placeholder = hint;
+      input.inputMode = 'numeric';
+      input.autocomplete = id === 'PhoneNumber' ? 'tel' : 'off';
+      field.append(input);
+      const err = form.querySelector(`[data-valmsg-for="${id}"]`);
+      if (err) field.append(err);
+      fields.append(field);
+    }
+    const loginErr = form.querySelector('[data-valmsg-for="LoginErrorStrar"]');
+    if (loginErr) fields.append(loginErr);
+    form.querySelector('.inputGroup')?.before(fields);
+    form.querySelectorAll('.inputGroup').forEach(n => n.remove()); // now-empty old table layout
+    // The site's own handler swallows Enter; submit like a normal form instead.
+    fields.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); form.requestSubmit(form.querySelector('[type=submit]')); } });
+    document.getElementById('IsraelPersonalId')?.focus();
+  }
+
+  if (isLoginPage(document)) return skinLogin();
+  setupHead(CSS, 'הכוכבים שלי');
   const mainDoc = document.cloneNode(true); // the served page, parsed before we replace the body
   document.body.innerHTML = '<div class="wrap"><div class="loading">טוען את הנתונים שלך…</div></div>';
 
